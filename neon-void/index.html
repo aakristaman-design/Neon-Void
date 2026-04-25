@@ -110,13 +110,16 @@
     opacity: 0.9;
     color: white;
     stroke: white;
+    position: relative;
+    z-index: 2;
   }
   .logo-mark circle { stroke: white; }
   .logo-electricity {
     position: absolute;
-    inset: -12px;
+    inset: -14px;
     pointer-events: none;
-    z-index: 10;
+    z-index: 20;
+    mix-blend-mode: screen;
   }
 
   .nav-links {
@@ -1750,10 +1753,10 @@ document.querySelectorAll('a[href^="#"]').forEach(a => {
       if (Math.abs(diff) > 0.02) {
         video.currentTime += diff * 0.12;
         if (typeof window.setElectricityMode === 'function') {
-          if (video.currentTime <= 2) {
+          if (video.currentTime <= 3) {
             window.setElectricityMode('intense');
           } else {
-            window.setElectricityMode('idle');
+            window.setElectricityMode('off');
           }
         }
       }
@@ -1777,95 +1780,156 @@ document.querySelectorAll('a[href^="#"]').forEach(a => {
 
   const ctx = canvas.getContext('2d');
 
+  const PAD = 14; // canvas overhang beyond logo bounds
+
   let electricityMode = 'idle';
-  let currentOpacity  = 0.25;
-  let currentArcCount = 1;
+  let currentOpacity  = 0.3;
+  let currentArcCount = 2;
   let lastFlicker     = 0;
-  let flickerInterval = 350;
+  let flickerInterval = 300;
   let arcs = [];
 
   function resizeCanvas() {
     const rect = logoEl.getBoundingClientRect();
-    canvas.width  = rect.width  + 24;
-    canvas.height = rect.height + 24;
+    canvas.width  = rect.width  + PAD * 2;
+    canvas.height = rect.height + PAD * 2;
   }
   resizeCanvas();
   window.addEventListener('resize', resizeCanvas);
 
   function randomBetween(a, b) { return a + Math.random() * (b - a); }
-
-  function generateArc(bounds, maxOffset) {
-    const side = Math.floor(Math.random() * 4);
-    let x, y, baseAngle;
-    if      (side === 0) { x = randomBetween(0, bounds.w); y = 0;        baseAngle = 0; }
-    else if (side === 1) { x = bounds.w; y = randomBetween(0, bounds.h); baseAngle = Math.PI / 2; }
-    else if (side === 2) { x = randomBetween(0, bounds.w); y = bounds.h; baseAngle = Math.PI; }
-    else                 { x = 0; y = randomBetween(0, bounds.h);        baseAngle = -Math.PI / 2; }
-
-    const angle    = baseAngle + randomBetween(-Math.PI / 3, Math.PI / 3);
-    const totalLen = randomBetween(5, 15);
-    const steps    = Math.floor(randomBetween(2, 5));
-    const points   = [{ x, y }];
-
-    for (let i = 1; i <= steps; i++) {
-      const t = i / steps;
-      const dist = totalLen * t;
-      points.push({
-        x: x + Math.cos(angle) * dist + randomBetween(-maxOffset, maxOffset),
-        y: y + Math.sin(angle) * dist + randomBetween(-maxOffset, maxOffset)
-      });
-    }
-    return points;
-  }
-
-  function flickerArcs() {
-    const rect   = logoEl.getBoundingClientRect();
-    const bounds = { w: rect.width + 24, h: rect.height + 24 };
-    const intense   = electricityMode === 'intense';
-    const maxOffset = intense ? 10 : 3;
-    arcs = Array.from({ length: currentArcCount }, () => generateArc(bounds, maxOffset));
-  }
-
   function lerp(a, b, t) { return a + (b - a) * t; }
+
+  // Returns a random point ON the logo perimeter (with slight jitter in/out)
+  function perimeterPoint(w, h, jitter) {
+    const logoX0 = PAD, logoY0 = PAD;
+    const logoX1 = w - PAD, logoY1 = h - PAD;
+    const logoW  = logoX1 - logoX0;
+    const logoH  = logoY1 - logoY0;
+    const perim  = 2 * (logoW + logoH);
+    const t      = Math.random() * perim;
+    const j      = jitter || 0;
+    if (t < logoW) {
+      return { x: logoX0 + t + randomBetween(-j, j), y: logoY0 + randomBetween(-j, j) };
+    } else if (t < logoW + logoH) {
+      return { x: logoX1 + randomBetween(-j, j), y: logoY0 + (t - logoW) + randomBetween(-j, j) };
+    } else if (t < 2 * logoW + logoH) {
+      return { x: logoX1 - (t - logoW - logoH) + randomBetween(-j, j), y: logoY1 + randomBetween(-j, j) };
+    } else {
+      return { x: logoX0 + randomBetween(-j, j), y: logoY1 - (t - 2 * logoW - logoH) + randomBetween(-j, j) };
+    }
+  }
+
+  // Jagged arc between two points with midpoint displacement
+  function jaggedPath(x0, y0, x1, y1, displacement, depth) {
+    if (depth === 0) return [{ x: x0, y: y0 }, { x: x1, y: y1 }];
+    const mx = (x0 + x1) / 2 + randomBetween(-displacement, displacement);
+    const my = (y0 + y1) / 2 + randomBetween(-displacement, displacement);
+    const d  = displacement * 0.55;
+    const left  = jaggedPath(x0, y0, mx, my, d, depth - 1);
+    const right = jaggedPath(mx, my, x1, y1, d, depth - 1);
+    return [...left.slice(0, -1), ...right];
+  }
+
+  // Arc that connects two perimeter points — wraps around the logo
+  function generatePerimeterArc(w, h, intense) {
+    const jitter = intense ? 10 : 5;
+    const disp   = intense ? 12 : 5;
+    const depth  = intense ? 4  : 3;
+    const p0 = perimeterPoint(w, h, jitter);
+    const p1 = perimeterPoint(w, h, jitter);
+    return jaggedPath(p0.x, p0.y, p1.x, p1.y, disp, depth);
+  }
+
+  // Short spark that shoots outward from a perimeter point
+  function generateSpark(w, h, intense) {
+    const p   = perimeterPoint(w, h, 0);
+    const cx  = w / 2, cy = h / 2;
+    // direction away from center
+    const nx  = p.x - cx, ny = p.y - cy;
+    const len = Math.sqrt(nx * nx + ny * ny) || 1;
+    const ext = intense ? randomBetween(6, 18) : randomBetween(3, 9);
+    const tx  = p.x + (nx / len) * ext;
+    const ty  = p.y + (ny / len) * ext;
+    return jaggedPath(p.x, p.y, tx, ty, intense ? 5 : 2, 2);
+  }
+
+  function generateArcSet() {
+    const w = canvas.width, h = canvas.height;
+    const intense = electricityMode === 'intense';
+    const n = currentArcCount;
+    const result = [];
+
+    // Perimeter-to-perimeter arcs (wrap around logo, appear in front)
+    const wrapCount = intense ? Math.floor(n * 0.6) : Math.floor(n * 0.5);
+    for (let i = 0; i < wrapCount; i++) result.push({ pts: generatePerimeterArc(w, h, intense), type: 'wrap' });
+
+    // Outward sparks
+    const sparkCount = n - wrapCount;
+    for (let i = 0; i < sparkCount; i++) result.push({ pts: generateSpark(w, h, intense), type: 'spark' });
+
+    arcs = result;
+  }
 
   function animLoop(ts) {
     const intense        = electricityMode === 'intense';
-    const targetOpacity  = intense ? 1.0 : 0.25;
-    const targetArcCount = intense ? 5   : 1;
-    flickerInterval      = intense ? 60  : 350;
+    const off            = electricityMode === 'off';
+    const targetOpacity  = off ? 0.0 : (intense ? 1.0  : 0.35);
+    const targetArcCount = off ? 0   : (intense ? 8    : 2);
+    flickerInterval      = intense ? 50   : 280;
 
     currentOpacity  = lerp(currentOpacity,  targetOpacity,  0.08);
-    currentArcCount = Math.round(lerp(currentArcCount, targetArcCount, 0.08));
+    currentArcCount = Math.round(lerp(currentArcCount, targetArcCount, 0.1));
 
     if (logoText) {
       logoText.style.textShadow = intense
-        ? `0 0 12px oklch(85% 0.18 196 / ${(currentOpacity * 0.8).toFixed(2)})`
-        : 'none';
-    }
-
-    if (ts - lastFlicker > flickerInterval) {
-      flickerArcs();
-      lastFlicker = ts;
+        ? `0 0 14px oklch(85% 0.18 196 / ${Math.min(currentOpacity * 0.9, 1).toFixed(2)}), 0 0 30px oklch(85% 0.18 196 / 0.3)`
+        : (currentOpacity > 0.28 ? `0 0 8px oklch(85% 0.18 196 / ${(currentOpacity * 0.4).toFixed(2)})` : 'none');
     }
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    if (arcs.length) {
-      ctx.strokeStyle = `oklch(85% 0.18 196 / ${Math.min(currentOpacity, 1).toFixed(3)})`;
-      ctx.lineWidth   = intense ? 1.2 : 0.6;
-      ctx.shadowColor = 'oklch(85% 0.18 196)';
-      ctx.shadowBlur  = intense ? 8 : 4;
-      arcs.forEach(pts => {
-        ctx.beginPath();
-        ctx.moveTo(pts[0].x, pts[0].y);
-        for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
-        ctx.stroke();
-      });
+
+    if (currentOpacity < 0.005) {
+      requestAnimationFrame(animLoop);
+      return;
     }
+
+    if (ts - lastFlicker > flickerInterval) {
+      generateArcSet();
+      lastFlicker = ts;
+    }
+
+    arcs.forEach(({ pts, type }) => {
+      const baseAlpha = type === 'spark'
+        ? Math.min(currentOpacity * 0.7, 1)
+        : Math.min(currentOpacity, 1);
+
+      ctx.save();
+      // Outer glow pass
+      ctx.strokeStyle = `oklch(85% 0.18 196 / ${(baseAlpha * 0.4).toFixed(3)})`;
+      ctx.lineWidth   = intense ? 3.5 : 2;
+      ctx.shadowColor = 'oklch(85% 0.18 196)';
+      ctx.shadowBlur  = intense ? 16 : 8;
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+      ctx.stroke();
+
+      // Core bright line
+      ctx.strokeStyle = `oklch(95% 0.12 196 / ${Math.min(baseAlpha * 1.1, 1).toFixed(3)})`;
+      ctx.lineWidth   = intense ? 1.2 : 0.7;
+      ctx.shadowBlur  = intense ? 6 : 3;
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+      ctx.stroke();
+      ctx.restore();
+    });
 
     requestAnimationFrame(animLoop);
   }
 
-  flickerArcs();
+  generateArcSet();
   requestAnimationFrame(animLoop);
 
   window.setElectricityMode = function(mode) { electricityMode = mode; };
