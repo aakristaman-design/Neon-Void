@@ -106,6 +106,7 @@
     width: 20px;
     height: 20px;
     margin-right: 8px;
+    margin-bottom: 2px;
     flex-shrink: 0;
     opacity: 0.9;
     color: white;
@@ -974,7 +975,7 @@
   footer {
     background: oklch(6% 0.02 265);
     border-top: 1px solid oklch(100% 0 0 / 0.08);
-    padding: 48px 64px;
+    padding: 72px 64px;
   }
   .footer-main {
     display: grid;
@@ -984,23 +985,14 @@
   }
   .footer-logo {
     font-family: 'Bebas Neue', sans-serif;
-    font-size: 28px;
+    font-size: 36px;
     letter-spacing: 0.12em;
     color: var(--cyan);
     text-shadow: var(--glow-cyan);
-    display: flex; flex-direction: column;
-    gap: 4px;
-  }
-  .footer-logo-sub {
-    font-family: 'Barlow Condensed', sans-serif;
-    font-size: 10px;
-    font-weight: 600;
-    letter-spacing: 0.4em;
-    color: var(--text-dim);
-    text-shadow: none;
+    display: flex; flex-direction: row; align-items: center;
   }
   .footer-nav {
-    display: flex; gap: 28px;
+    display: flex; gap: 40px;
     list-style: none;
   }
   .footer-nav a {
@@ -1038,7 +1030,7 @@
   .social-icon svg { width: 15px; height: 15px; fill: currentColor; }
 
   .footer-bottom {
-    margin-top: 28px;
+    margin-top: 40px;
     padding-top: 24px;
     border-top: 1px solid oklch(100% 0 0 / 0.06);
     display: flex;
@@ -1051,7 +1043,11 @@
     letter-spacing: 0.06em;
   }
   .footer-legal {
-    display: flex; gap: 20px;
+    display: flex; gap: 24px; align-items: center;
+  }
+  .footer-legal-sep {
+    color: var(--text-dim);
+    font-size: 12px;
   }
   .footer-legal a {
     font-size: 12px;
@@ -1539,8 +1535,11 @@
 <footer>
   <div class="footer-main">
     <div class="footer-logo">
+      <svg width="32" height="32" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="display:block;margin-right:8px;flex-shrink:0;opacity:0.9;color:var(--cyan);filter:drop-shadow(0 0 6px oklch(85% 0.18 196 / 0.9)) drop-shadow(0 0 14px oklch(85% 0.18 196 / 0.4));margin-bottom:2px;">
+        <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/>
+        <circle cx="12" cy="12" r="2.5" fill="currentColor"/>
+      </svg>
       NEON VOID
-      <span class="footer-logo-sub">© 2026 Void Interactive</span>
     </div>
 
     <ul class="footer-nav">
@@ -1572,10 +1571,12 @@
   </div>
 
   <div class="footer-bottom">
-    <span class="footer-copy">© 2026 Void Interactive Ltd. All rights reserved. NEON VOID™ and the Void Interactive logo are trademarks.</span>
+    <span class="footer-copy">© 2026 Void Interactive Ltd. All rights reserved.</span>
     <div class="footer-legal">
       <a href="#">Privacy Policy</a>
+      <span class="footer-legal-sep">·</span>
       <a href="#">Terms of Service</a>
+      <span class="footer-legal-sep">·</span>
       <a href="#">Cookie Settings</a>
     </div>
   </div>
@@ -1741,7 +1742,7 @@ document.querySelectorAll('a[href^="#"]').forEach(a => {
 
     // Resume autoplay loop when cursor leaves the hero
     hero.addEventListener('mouseleave', () => {
-      video.play();
+      video.play(); if (typeof window.setElectricityMode === 'function') window.setElectricityMode('off');
     });
     hero.addEventListener('mouseenter', () => {
       video.pause();
