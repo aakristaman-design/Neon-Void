@@ -1,6 +1,6 @@
 # Neon Void
 
-Concept website exploring a futuristic cyberpunk game experience.
+AI-assisted concept website exploring a futuristic cyberpunk game experience.
 
 ## Scope
 
